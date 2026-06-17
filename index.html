@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>钥匙库存查询</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f5f7fa;
+  color: #333;
+  min-height: 100vh;
+}
+.header {
+  background: linear-gradient(135deg, #1a73e8, #0d47a1);
+  color: #fff;
+  padding: 16px 20px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .sub { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+.header .loaded { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+
+.search-box { max-width: 640px; margin: 24px auto; padding: 0 16px; }
+.search-input-wrap {
+  display: flex;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  overflow: hidden;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+.search-input-wrap:focus-within { border-color: #1a73e8; }
+.search-input-wrap input {
+  flex: 1;
+  border: none; outline: none;
+  padding: 14px 16px;
+  font-size: 18px;
+  color: #333;
+  min-width: 0;
+  background: transparent;
+}
+.search-input-wrap input::placeholder { color: #bbb; }
+.search-input-wrap button {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  padding: 14px 24px;
+  font-size: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.search-input-wrap button:hover { background: #1557b0; }
+.search-input-wrap button:active { background: #0d47a1; }
+.search-input-wrap button:disabled { background: #90caf9; cursor: not-allowed; }
+
+.hint { max-width: 640px; margin: 8px auto 0; padding: 0 20px; font-size: 13px; color: #999; text-align: center; }
+
+.results { max-width: 640px; margin: 16px auto; padding: 0 16px 60px; }
+.result-count { font-size: 14px; color: #666; margin-bottom: 12px; padding: 0 4px; }
+.result-count strong { color: #1a73e8; }
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+  border-left: 4px solid #1a73e8;
+}
+
+.status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.status-in { background: #e8f5e9; color: #2e7d32; }
+.status-out { background: #fff3e0; color: #e65100; }
+.status-unknown { background: #f5f5f5; color: #999; }
+
+.plate { font-size: 20px; font-weight: 700; color: #1a73e8; letter-spacing: 1px; }
+.model { font-size: 14px; color: #666; margin-left: 8px; }
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+.info-item { font-size: 14px; color: #555; }
+.info-item .label { color: #999; font-size: 12px; }
+.info-item .value { color: #333; font-weight: 500; margin-top: 2px; word-break: break-all; }
+
+.borrow-section { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #e0e0e0; }
+.borrow-title { font-size: 13px; color: #999; margin-bottom: 8px; font-weight: 500; }
+.borrow-item {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.borrow-item span { color: #666; }
+.borrow-item .person { color: #e65100; font-weight: 500; }
+
+.empty { text-align: center; padding: 60px 20px; color: #bbb; }
+.empty .icon { font-size: 48px; margin-bottom: 12px; }
+.empty .msg { font-size: 15px; }
+
+.loader {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
+.spinner {
+  display: inline-block;
+  width: 32px; height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.footer { text-align: center; padding: 24px; font-size: 12px; color: #ccc; }
+
+@media (max-width: 480px) {
+  .header h1 { font-size: 18px; }
+  .search-input-wrap input { font-size: 16px; padding: 12px; }
+  .search-input-wrap button { padding: 12px 16px; font-size: 14px; }
+  .info-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔑 钥匙库存查询</h1>
+  <div class="sub">输入车牌号即可查询钥匙状态</div>
+  <div class="loaded" id="dataStatus">数据加载中...</div>
+</div>
+
+<div class="search-box">
+  <div class="search-input-wrap">
+    <input type="text" id="searchInput" placeholder="输入车牌号，如 苏U6771X" autocomplete="off" disabled>
+    <button id="searchBtn" onclick="doSearch()" disabled>查询</button>
+  </div>
+  <div class="hint">支持精确查询和模糊查询，输入部分车牌号亦可</div>
+</div>
+
+<div class="results" id="results">
+  <div class="loader"><div class="spinner"></div><div style="margin-top:12px">正在加载钥匙数据...</div></div>
+</div>
+
+<div class="footer">钥匙库存数据 · 仅供内部使用</div>
+
+<script>
+// ===================== 数据加载 =====================
+const dataStatus = document.getElementById('dataStatus');
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
+const results = document.getElementById('results');
+
+let keyData = null;   // { d: { plate: [records] }, t: total }
+let borrowData = null; // { plate: [borrows] }
+let dataReady = false;
+
+// 使用 DecompressionStream 解压 gzip
+async function decompressGzip(response) {
+  const ds = new DecompressionStream('gzip');
+  const decompressed = response.body.pipeThrough(ds);
+  const text = await new Response(decompressed).text();
+  return JSON.parse(text);
+}
+
+async function loadData() {
+  try {
+    // 并行加载钥匙数据和借用记录
+    const [keysResp, borrowsResp] = await Promise.all([
+      fetch('data/keys.json.gz'),
+      fetch('data/borrows.json.gz')
+    ]);
+
+    const loadStart = performance.now();
+    const [keys, borrows] = await Promise.all([
+      decompressGzip(keysResp),
+      decompressGzip(borrowsResp)
+    ]);
+    const loadTime = ((performance.now() - loadStart) / 1000).toFixed(1);
+
+    keyData = keys;
+    borrowData = borrows;
+    dataReady = true;
+
+    dataStatus.textContent = `${keys.t.toLocaleString()} 个车牌已加载 (${loadTime}s)`;
+    searchInput.disabled = false;
+    searchBtn.disabled = false;
+    searchInput.focus();
+    searchInput.placeholder = '输入车牌号，如 苏U6771X';
+
+    results.innerHTML = '<div class="empty"><div class="icon">🔍</div><div class="msg">输入车牌号，开始查询</div></div>';
+  } catch (err) {
+    console.error('数据加载失败:', err);
+    dataStatus.textContent = '数据加载失败，请刷新页面重试';
+    results.innerHTML = '<div class="empty"><div class="icon">❌</div><div class="msg">数据加载失败，请刷新页面重试</div></div>';
+  }
+}
+
+// 启动加载
+loadData();
+
+// ===================== 搜索逻辑 =====================
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+let debounceTimer;
+searchInput.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(doSearch, 400);
+});
+
+function doSearch() {
+  if (!dataReady) return;
+
+  const q = searchInput.value.trim().toUpperCase();
+  if (!q) {
+    results.innerHTML = '<div class="empty"><div class="icon">🔍</div><div class="msg">输入车牌号，开始查询</div></div>';
+    return;
+  }
+
+  const t0 = performance.now();
+  const matched = [];
+
+  // 1. 精确匹配
+  if (keyData.d[q]) {
+    for (const rec of keyData.d[q]) {
+      matched.push({ ...rec, _plate: q });
+    }
+  }
+
+  // 2. 模糊匹配
+  if (matched.length === 0 && q.length >= 2) {
+    for (const [plate, records] of Object.entries(keyData.d)) {
+      if (plate.includes(q)) {
+        for (const rec of records) {
+          matched.push({ ...rec, _plate: plate });
+        }
+      }
+      if (matched.length >= 200) break;
+    }
+  }
+
+  const t1 = performance.now();
+
+  if (matched.length === 0) {
+    results.innerHTML = `<div class="empty"><div class="icon">😕</div><div class="msg">未找到车牌「${esc(q)}」的相关记录</div></div>`;
+    return;
+  }
+
+  // 渲染结果
+  let html = `<div class="result-count">找到 <strong>${matched.length}</strong> 条匹配记录 (${(t1 - t0).toFixed(0)}ms)</div>`;
+
+  for (const rec of matched) {
+    const plate = rec._plate || rec['车牌'] || '';
+    const model = rec['车型'] || '';
+    const cabinet = rec['钥匙柜'] || '';
+    const keyRing = rec['钥匙串'] || '';
+    const keyNo = rec['钥匙编号'] || '';
+    const backupCount = Number(rec['风控备用钥匙数量']) || 0;
+    const customerKeyCount = Number(rec['客户钥匙']) || 0;
+    const hasBackup = (backupCount - customerKeyCount) > 0;
+    const lastBorrow = rec['最近一次借用时间'] || '';
+    const borrower = rec['借用人'] || '';
+    const purpose = rec['用途'] || '';
+    const returnTime = rec['归还时间'] || '';
+    const hasPhoto = rec['是否拍照'] || '';
+    const matched_key = rec['已开模已匹配'] || '';
+    const unmatched = rec['已开模未匹配'] || '';
+    const matchTime = rec['匹配时间'] || '';
+
+    let statusBadge = '未知';
+    let statusClass = 'status-unknown';
+    if (returnTime) {
+      statusBadge = '已归还';
+      statusClass = 'status-in';
+    } else if (borrower) {
+      statusBadge = '借出中';
+      statusClass = 'status-out';
+    } else if (cabinet) {
+      statusBadge = '在库';
+      statusClass = 'status-in';
+    }
+
+    html += `<div class="card">`;
+    html += `<div class="status-row"><span class="status-badge ${statusClass}">${statusBadge}</span></div>`;
+    html += `<div><span class="plate">${esc(plate)}</span><span class="model">${esc(model)}</span></div>`;
+
+    html += `<div class="info-grid">`;
+    html += `<div class="info-item"><div class="label">📦 钥匙柜</div><div class="value">${esc(cabinet) || '-'}</div></div>`;
+    html += `<div class="info-item"><div class="label">🔗 钥匙串</div><div class="value">${esc(keyRing) || '-'}</div></div>`;
+    html += `<div class="info-item"><div class="label">#️⃣ 编号</div><div class="value">${esc(String(keyNo)) || '-'}</div></div>`;
+    html += `<div class="info-item"><div class="label">🔑 备用钥匙</div><div class="value">${hasBackup ? `有 (${backupCount - customerKeyCount})` : '没有'}</div></div>`;
+    if (customerKeyCount > 0) html += `<div class="info-item"><div class="label">👤 客户钥匙</div><div class="value">${customerKeyCount}</div></div>`;
+    if (hasPhoto) html += `<div class="info-item"><div class="label">📷 拍照</div><div class="value">${esc(hasPhoto)}</div></div>`;
+    if (matched_key) html += `<div class="info-item"><div class="label">🔧 已开模匹配</div><div class="value">${esc(String(matched_key))}</div></div>`;
+    if (unmatched) html += `<div class="info-item"><div class="label">🔧 已开模未匹配</div><div class="value">${esc(String(unmatched))}</div></div>`;
+    if (matchTime) html += `<div class="info-item"><div class="label">🕐 匹配时间</div><div class="value">${esc(matchTime)}</div></div>`;
+    html += `</div>`;
+
+    // 当前借用信息
+    if (borrower || lastBorrow) {
+      html += `<div class="borrow-section"><div class="borrow-title">📋 最近借用记录</div>`;
+      html += `<div class="borrow-item">`;
+      if (borrower) html += `<span>👤 <span class="person">${esc(borrower)}</span></span>`;
+      if (purpose) html += `<span>📝 ${esc(purpose)}</span>`;
+      if (lastBorrow) html += `<span>📅 借出: ${esc(lastBorrow)}</span>`;
+      if (returnTime) html += `<span>✅ 归还: ${esc(returnTime)}</span>`;
+      html += `</div></div>`;
+    }
+
+    // 历史借用记录
+    if (borrowData && borrowData[plate]) {
+      const history = borrowData[plate].slice(0, 10);
+      html += `<div class="borrow-section"><div class="borrow-title">📚 借用历史 (共${borrowData[plate].length}条，显示最近${history.length}条)</div>`;
+      for (const b of history) {
+        html += `<div class="borrow-item">`;
+        if (b['借用人']) html += `<span>👤 <span class="person">${esc(String(b['借用人']))}</span></span>`;
+        if (b['用途']) html += `<span>📝 ${esc(String(b['用途']))}</span>`;
+        if (b['借出时间']) html += `<span>📅 ${esc(String(b['借出时间']))}</span>`;
+        if (b['归还时间']) html += `<span>✅ ${esc(String(b['归还时间']))}</span>`;
+        if (b['是否归还'] != null) html += `<span>📌 ${b['是否归还'] ? '已还' : '未还'}</span>`;
+        if (b['入库地']) html += `<span>📍 ${esc(String(b['入库地']))}</span>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  results.innerHTML = html;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+</script>
+
+</body>
+</html>
